@@ -170,48 +170,119 @@ def readable_size(value: float | int | None) -> float:
     return round(float(value) / 1_000_000, 1)
 
 
+def format_size_mb(*values: float | int | None) -> float:
+    return readable_size(sum(float(value or 0) for value in values))
+
+
 def format_options(info: dict[str, Any]) -> list[dict[str, Any]]:
+    source_formats = info.get("formats") or []
+    video_formats = [
+        item
+        for item in source_formats
+        if item.get("vcodec") and item.get("vcodec") != "none" and item.get("height")
+    ]
+    audio_formats = [
+        item
+        for item in source_formats
+        if item.get("acodec") and item.get("acodec") != "none"
+        and (not item.get("vcodec") or item.get("vcodec") == "none")
+    ]
+
+    best_audio = max(
+        audio_formats,
+        key=lambda item: float(item.get("abr") or 0),
+        default={},
+    )
+    best_video = max(
+        video_formats,
+        key=lambda item: int(item.get("height") or 0),
+        default={},
+    )
+    max_height = int(best_video.get("height") or info.get("height") or 0)
+    best_video_size = best_video.get("filesize") or best_video.get("filesize_approx")
+    best_audio_size = best_audio.get("filesize") or best_audio.get("filesize_approx")
+
     options: list[dict[str, Any]] = [
         {
-            "formatId": "best",
-            "label": "Smart best",
+            "formatId": "mp4:best",
+            "label": "MP4 · Best available",
             "extension": "mp4",
-            "quality": "Best available",
-            "sizeMb": readable_size(info.get("filesize") or info.get("filesize_approx")),
+            "quality": f"Up to {max_height}p" if max_height else "Best available",
+            "sizeMb": format_size_mb(best_video_size, best_audio_size, info.get("filesize")),
             "hasAudio": True,
             "recommended": True,
-        },
-        {
-            "formatId": "bestaudio",
-            "label": "Audio only",
-            "extension": "m4a",
-            "quality": "Original audio",
-            "sizeMb": readable_size(info.get("filesize") or info.get("filesize_approx")),
-            "hasAudio": True,
-            "recommended": False,
-        },
+        }
     ]
-    seen = {"best", "bestaudio"}
-    for item in info.get("formats", []):
-        format_id = str(item.get("format_id") or "")
-        if not format_id or format_id in seen or not item.get("vcodec") or not item.get("acodec"):
-            continue
-        height = item.get("height")
-        label = f"{height}p" if height else str(item.get("format_note") or "Video")
+
+    heights = sorted(
+        {
+            int(item.get("height"))
+            for item in video_formats
+            if item.get("height") and int(item.get("height")) < max_height
+        },
+        reverse=True,
+    )
+    for height in heights[:4]:
+        matching = max(
+            (item for item in video_formats if int(item.get("height") or 0) == height),
+            key=lambda item: float(item.get("filesize") or item.get("filesize_approx") or 0),
+            default={},
+        )
         options.append(
             {
-                "formatId": format_id,
-                "label": f"{label} {str(item.get('ext') or 'video').upper()}",
-                "extension": str(item.get("ext") or "mp4"),
-                "quality": str(item.get("format_note") or label),
-                "sizeMb": readable_size(item.get("filesize") or item.get("filesize_approx")),
-                "hasAudio": bool(item.get("acodec") and item.get("acodec") != "none"),
+                "formatId": f"mp4:{height}",
+                "label": f"MP4 · {height}p",
+                "extension": "mp4",
+                "quality": f"Video up to {height}p",
+                "sizeMb": format_size_mb(
+                    matching.get("filesize") or matching.get("filesize_approx"),
+                    best_audio_size,
+                ),
+                "hasAudio": True,
                 "recommended": False,
             }
         )
-        seen.add(format_id)
-        if len(options) >= 7:
+
+    audio_options: list[dict[str, Any]] = []
+    seen_audio_quality: set[int] = set()
+    for item in sorted(
+        audio_formats,
+        key=lambda value: float(value.get("abr") or 0),
+        reverse=True,
+    ):
+        format_id = str(item.get("format_id") or "")
+        bitrate = int(round(float(item.get("abr") or 0)))
+        if not format_id or not bitrate or bitrate in seen_audio_quality:
+            continue
+        seen_audio_quality.add(bitrate)
+        audio_options.append(
+            {
+                "formatId": f"audio:{format_id}",
+                "label": f"M4A · {bitrate} kbps",
+                "extension": "m4a",
+                "quality": "Source audio quality",
+                "sizeMb": readable_size(item.get("filesize") or item.get("filesize_approx")),
+                "hasAudio": True,
+                "recommended": not audio_options,
+            }
+        )
+        if len(audio_options) >= 3:
             break
+
+    if audio_options:
+        options.extend(audio_options)
+    else:
+        options.append(
+            {
+                "formatId": "audio:best",
+                "label": "M4A · Best available",
+                "extension": "m4a",
+                "quality": "Source audio quality",
+                "sizeMb": readable_size(best_audio_size or info.get("filesize")),
+                "hasAudio": True,
+                "recommended": False,
+            }
+        )
     return options
 
 
@@ -236,7 +307,7 @@ def analysis_payload(url: str, info: dict[str, Any]) -> dict[str, Any]:
         "thumbnailUrl": str(info.get("thumbnail") or ""),
         "chapters": chapters,
         "formats": options,
-        "smartRecommendation": "Smart best keeps the original picture and audio together, then lets PulseDrop optimize the container.",
+        "smartRecommendation": "PulseDrop will produce a real MP4 with matched video and audio, or convert the selected source bitrate to M4A for audio-only downloads.",
     }
 
 
@@ -251,10 +322,30 @@ def file_label(download: sqlite3.Row) -> str:
 def make_ydl_options(download: sqlite3.Row, folder: Path) -> dict[str, Any]:
     requested_format = download["format_id"]
     if download["mode"] == "audio":
-        format_selector = "bestaudio/best"
+        audio_target = requested_format.removeprefix("audio:") if requested_format.startswith("audio:") else "best"
+        if audio_target == "best":
+            format_selector = "bestaudio/best"
+        elif audio_target.isdigit():
+            format_selector = f"bestaudio[abr<={audio_target}]/bestaudio/best"
+        else:
+            format_selector = audio_target
         postprocessors = [{"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}]
+    elif requested_format.startswith("mp4:"):
+        target_height = requested_format.removeprefix("mp4:")
+        if target_height == "best":
+            format_selector = (
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+                "bestvideo+bestaudio/best[ext=mp4]/best"
+            )
+        else:
+            format_selector = (
+                f"bestvideo[ext=mp4][height<={target_height}]+bestaudio[ext=m4a]/"
+                f"bestvideo[height<={target_height}]+bestaudio/"
+                f"best[ext=mp4][height<={target_height}]/best[height<={target_height}]"
+            )
+        postprocessors = [{"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}]
     elif requested_format == "best":
-        format_selector = "bv*+ba/b"
+        format_selector = "bestvideo+bestaudio/best"
         postprocessors = [{"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}]
     else:
         format_selector = requested_format
@@ -282,10 +373,11 @@ def make_ydl_options(download: sqlite3.Row, folder: Path) -> dict[str, Any]:
         "outtmpl": str(folder / "%(title).180B [%(id)s].%(ext)s"),
         "progress_hooks": [progress_hook],
         "postprocessors": postprocessors,
-        "merge_output_format": "mp4",
         "restrictfilenames": True,
         "overwrites": True,
     }
+    if download["mode"] == "video":
+        options["merge_output_format"] = "mp4"
     if download["chapter_mode"] == "split":
         options["split_chapters"] = True
     if download["include_subtitles"]:
