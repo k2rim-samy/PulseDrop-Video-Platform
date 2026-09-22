@@ -10,23 +10,21 @@ name = "API Server"
 paths = ["/api"]
 
 [services.development]
-run = "pnpm --filter @workspace/api-server run dev"
+run = "cd \"$(git rev-parse --show-toplevel)/artifacts/api-server/python\" && uv run uvicorn pulsedrop_server:app --host 0.0.0.0 --port $PORT"
 
 [services.production]
 
 [services.production.build]
-args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
+args = ["uv", "sync", "--locked"]
 
 [services.production.build.env]
-NODE_ENV = "production"
+UV_PROJECT_ENVIRONMENT = ".pythonlibs"
 
 [services.production.run]
-# we don't run through pnpm to make startup faster in production
-args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+args = ["uv", "run", "uvicorn", "--app-dir", "artifacts/api-server/python", "pulsedrop_server:app", "--host", "0.0.0.0", "--port", "8080"]
 
 [services.production.run.env]
 PORT = "8080"
-NODE_ENV = "production"
 
 [services.production.health.startup]
 path = "/api/healthz"

@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: downloads
+    description: Video analysis and download jobs
+  - name: library
+    description: Download library and saved presets
 paths:
   /healthz:
     get:
@@ -24,7 +28,246 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /summary:
+    get:
+      operationId: getSummary
+      tags: [library]
+      summary: Get library summary
+      responses:
+        "200":
+          description: Summary metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Summary"
+  /insights:
+    get:
+      operationId: getInsights
+      tags: [library]
+      summary: Get recent download insights
+      responses:
+        "200":
+          description: Recent insights
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Insights"
+  /downloads:
+    get:
+      operationId: listDownloads
+      tags: [downloads]
+      summary: List saved download jobs
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, queued, downloading, completed, failed, canceled]
+            default: all
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Download jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Download"
+    post:
+      operationId: createDownload
+      tags: [downloads]
+      summary: Create a download job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadInput"
+      responses:
+        "201":
+          description: Created download job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Download"
+        "400":
+          description: Invalid URL or options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /downloads/analyze:
+    post:
+      operationId: analyzeVideo
+      tags: [downloads]
+      summary: Inspect a YouTube video and recommend a format
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeInput"
+      responses:
+        "200":
+          description: Video metadata and available formats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoAnalysis"
+        "400":
+          description: Invalid URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Video metadata unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /downloads/{downloadId}:
+    get:
+      operationId: getDownload
+      tags: [downloads]
+      summary: Get a download job
+      parameters:
+        - $ref: "#/components/parameters/DownloadId"
+      responses:
+        "200":
+          description: Download job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Download"
+        "404":
+          description: Download not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteDownload
+      tags: [downloads]
+      summary: Delete a saved download job
+      parameters:
+        - $ref: "#/components/parameters/DownloadId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Download not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /downloads/{downloadId}/start:
+    post:
+      operationId: startDownload
+      tags: [downloads]
+      summary: Start or restart a download
+      parameters:
+        - $ref: "#/components/parameters/DownloadId"
+      responses:
+        "202":
+          description: Download accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Download"
+        "404":
+          description: Download not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /downloads/{downloadId}/cancel:
+    post:
+      operationId: cancelDownload
+      tags: [downloads]
+      summary: Cancel an active download
+      parameters:
+        - $ref: "#/components/parameters/DownloadId"
+      responses:
+        "200":
+          description: Canceled download
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Download"
+        "404":
+          description: Download not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /presets:
+    get:
+      operationId: listPresets
+      tags: [library]
+      summary: List saved presets
+      responses:
+        "200":
+          description: Presets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Preset"
+    post:
+      operationId: createPreset
+      tags: [library]
+      summary: Save a format preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresetInput"
+      responses:
+        "201":
+          description: Saved preset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preset"
+  /presets/{presetId}:
+    delete:
+      operationId: deletePreset
+      tags: [library]
+      summary: Delete a preset
+      parameters:
+        - name: presetId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
 components:
+  parameters:
+    DownloadId:
+      name: downloadId
+      in: path
+      required: true
+      schema:
+        type: integer
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +276,200 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    Summary:
+      type: object
+      properties:
+        totalDownloads:
+          type: integer
+        completedDownloads:
+          type: integer
+        activeDownloads:
+          type: integer
+        storageUsedMb:
+          type: number
+        minutesSaved:
+          type: integer
+        streakDays:
+          type: integer
+      required: [totalDownloads, completedDownloads, activeDownloads, storageUsedMb, minutesSaved, streakDays]
+    Insight:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: number
+        detail:
+          type: string
+      required: [label, value, detail]
+    Insights:
+      type: object
+      properties:
+        formatMix:
+          type: array
+          items:
+            $ref: "#/components/schemas/Insight"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/Download"
+      required: [formatMix, recentActivity]
+    AnalyzeInput:
+      type: object
+      properties:
+        url:
+          type: string
+          minLength: 8
+      required: [url]
+    FormatOption:
+      type: object
+      properties:
+        formatId:
+          type: string
+        label:
+          type: string
+        extension:
+          type: string
+        quality:
+          type: string
+        sizeMb:
+          type: number
+        hasAudio:
+          type: boolean
+        recommended:
+          type: boolean
+      required: [formatId, label, extension, quality, sizeMb, hasAudio, recommended]
+    Chapter:
+      type: object
+      properties:
+        title:
+          type: string
+        start:
+          type: number
+        end:
+          type: number
+      required: [title, start, end]
+    VideoAnalysis:
+      type: object
+      properties:
+        sourceUrl:
+          type: string
+        videoId:
+          type: string
+        title:
+          type: string
+        channel:
+          type: string
+        durationSeconds:
+          type: integer
+        thumbnailUrl:
+          type: string
+        chapters:
+          type: array
+          items:
+            $ref: "#/components/schemas/Chapter"
+        formats:
+          type: array
+          items:
+            $ref: "#/components/schemas/FormatOption"
+        smartRecommendation:
+          type: string
+      required: [sourceUrl, videoId, title, channel, durationSeconds, thumbnailUrl, chapters, formats, smartRecommendation]
+    DownloadInput:
+      type: object
+      properties:
+        url:
+          type: string
+          minLength: 8
+        title:
+          type: string
+        formatId:
+          type: string
+          default: best
+        mode:
+          type: string
+          enum: [video, audio]
+          default: video
+        chapterMode:
+          type: string
+          enum: [full, split]
+          default: full
+        includeSubtitles:
+          type: boolean
+          default: false
+      required: [url]
+    Download:
+      type: object
+      properties:
+        id:
+          type: integer
+        sourceUrl:
+          type: string
+        title:
+          type: string
+        channel:
+          type: string
+        thumbnailUrl:
+          type: string
+        status:
+          type: string
+          enum: [queued, downloading, completed, failed, canceled]
+        progress:
+          type: number
+        mode:
+          type: string
+          enum: [video, audio]
+        chapterMode:
+          type: string
+          enum: [full, split]
+        includeSubtitles:
+          type: boolean
+        formatLabel:
+          type: string
+        fileName:
+          type: ["string", "null"]
+        fileUrl:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+        durationSeconds:
+          type: integer
+        createdAt:
+          type: string
+        completedAt:
+          type: ["string", "null"]
+      required: [id, sourceUrl, title, channel, thumbnailUrl, status, progress, mode, chapterMode, includeSubtitles, formatLabel, fileName, fileUrl, error, durationSeconds, createdAt, completedAt]
+    PresetInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        formatId:
+          type: string
+        mode:
+          type: string
+          enum: [video, audio]
+        chapterMode:
+          type: string
+          enum: [full, split]
+        includeSubtitles:
+          type: boolean
+      required: [name, formatId, mode, chapterMode, includeSubtitles]
+    Preset:
+      allOf:
+        - $ref: "#/components/schemas/PresetInput"
+        - type: object
+          properties:
+            id:
+              type: integer
+            createdAt:
+              type: string
+          required: [id, createdAt]
 

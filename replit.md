@@ -1,44 +1,55 @@
-# [Project name]
+# PulseDrop
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+PulseDrop analyzes permitted YouTube links, recommends a format, and downloads saved files with chapter-aware exports.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `uv run uvicorn --app-dir artifacts/api-server/python pulsedrop_server:app --host 0.0.0.0 --port 8080` — run the Python API server
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/pulsedrop run typecheck` — check the web app
+- `PORT=18372 BASE_PATH=/ pnpm --filter @workspace/pulsedrop run build` — production web build check
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- API: Python FastAPI + Uvicorn
+- Download engine: yt-dlp + FFmpeg
+- Database: Python standard-library SQLite at `artifacts/api-server/data/pulsedrop.db`
+- API contract: OpenAPI + Orval-generated React Query hooks
+- Frontend: React + Vite + Tailwind CSS
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/pulsedrop/src/pulsedrop-ui.tsx` — product UI, routes, hooks, and interaction states
+- `artifacts/pulsedrop/src/index.css` — PulseDrop visual system and motion
+- `artifacts/api-server/python/main.py` — FastAPI routes, SQLite schema, download jobs, file serving
+- `artifacts/api-server/python/pulsedrop_server.py` — stable Uvicorn entrypoint
+- `lib/api-spec/openapi.yaml` — API source of truth
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The service is Python-first and runs behind the existing `/api` artifact route.
+- SQLite stores job metadata; downloaded bytes stay in per-job folders under `artifacts/api-server/data/files`.
+- Downloads are asynchronous jobs with polling-friendly status/progress and explicit cancel/restart actions.
+- YouTube URL analysis happens before download so format recommendations and chapter options are based on source metadata.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Analyze permitted YouTube URLs and inspect available formats.
+- Choose smart video or audio output, split chapter bundles, and optional subtitles.
+- Track active/completed/failed jobs in a searchable library.
+- Save reusable format presets and view summary insights.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- The user requested a professional website with focused animation, unusual but useful downloader features, and Python service/database code.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The API workflow resolves its Python working directory from the repository root; use the managed workflow rather than a hand-created duplicate.
+- The frontend build needs workflow-style `PORT` and `BASE_PATH` values when run manually.
 
 ## Pointers
 

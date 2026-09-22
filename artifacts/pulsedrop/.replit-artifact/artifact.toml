@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "PulseDrop"
+description = "A focused video utility for downloading permitted YouTube videos with format intelligence, chapter-aware exports, and a personal download library."
+version = "1.0.0"
+id = "artifacts/pulsedrop"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18372
+
+[services.development]
+run = "pnpm --filter @workspace/pulsedrop run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/pulsedrop", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/pulsedrop/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18372"
+BASE_PATH = "/"

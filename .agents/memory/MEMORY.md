@@ -1,0 +1,1 @@
+- [Python artifact workflow](python-artifact-workflow.md) — Managed API artifacts need a stable Python entrypoint and root-safe working-directory resolution.
