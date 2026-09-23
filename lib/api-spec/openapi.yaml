@@ -389,6 +389,12 @@ components:
           minLength: 8
         title:
           type: string
+        channel:
+          type: string
+        thumbnailUrl:
+          type: string
+        durationSeconds:
+          type: integer
         formatId:
           type: string
           default: best

@@ -34,6 +34,7 @@ PulseDrop analyzes permitted YouTube links, recommends a format, and downloads s
 - SQLite stores job metadata; downloaded bytes stay in per-job folders under `artifacts/api-server/data/files`.
 - Downloads are asynchronous jobs with polling-friendly status/progress and explicit cancel/restart actions.
 - YouTube URL analysis happens before download so format recommendations and chapter options are based on source metadata.
+- Format choices are normalized to `mp4:<height>` and `audio:<source-format>` IDs so the UI never exposes incompatible source containers.
 
 ## Product
 

@@ -90,6 +90,9 @@ class AnalyzeInput(BaseModel):
 class DownloadInput(BaseModel):
     url: str = Field(min_length=8)
     title: str | None = None
+    channel: str | None = None
+    thumbnailUrl: str | None = None
+    durationSeconds: int = 0
     formatId: str = "best"
     mode: Literal["video", "audio"] = "video"
     chapterMode: Literal["full", "split"] = "full"
@@ -174,6 +177,12 @@ def format_size_mb(*values: float | int | None) -> float:
     return readable_size(sum(float(value or 0) for value in values))
 
 
+def combined_size_mb(video_size: float | int | None, audio_size: float | int | None) -> float:
+    if not video_size or not audio_size:
+        return 0
+    return format_size_mb(video_size, audio_size)
+
+
 def format_options(info: dict[str, Any]) -> list[dict[str, Any]]:
     source_formats = info.get("formats") or []
     video_formats = [
@@ -208,7 +217,7 @@ def format_options(info: dict[str, Any]) -> list[dict[str, Any]]:
             "label": "MP4 · Best available",
             "extension": "mp4",
             "quality": f"Up to {max_height}p" if max_height else "Best available",
-            "sizeMb": format_size_mb(best_video_size, best_audio_size, info.get("filesize")),
+            "sizeMb": combined_size_mb(best_video_size, best_audio_size),
             "hasAudio": True,
             "recommended": True,
         }
@@ -234,7 +243,7 @@ def format_options(info: dict[str, Any]) -> list[dict[str, Any]]:
                 "label": f"MP4 · {height}p",
                 "extension": "mp4",
                 "quality": f"Video up to {height}p",
-                "sizeMb": format_size_mb(
+                "sizeMb": combined_size_mb(
                     matching.get("filesize") or matching.get("filesize_approx"),
                     best_audio_size,
                 ),
@@ -541,12 +550,15 @@ def create_download(payload: DownloadInput) -> dict[str, Any]:
         cursor = conn.execute(
             """
             INSERT INTO downloads
-              (source_url, title, mode, chapter_mode, include_subtitles, format_id, format_label, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              (source_url, title, channel, thumbnail_url, duration_seconds, mode, chapter_mode, include_subtitles, format_id, format_label, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 url,
                 title,
+                payload.channel or "",
+                payload.thumbnailUrl or "",
+                payload.durationSeconds,
                 payload.mode,
                 payload.chapterMode,
                 int(payload.includeSubtitles),

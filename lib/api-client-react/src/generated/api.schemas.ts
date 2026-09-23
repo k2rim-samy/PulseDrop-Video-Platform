@@ -137,6 +137,9 @@ export interface DownloadInput {
   /** @minLength 8 */
   url: string;
   title?: string;
+  channel?: string;
+  thumbnailUrl?: string;
+  durationSeconds?: number;
   formatId?: string;
   mode?: DownloadInputMode;
   chapterMode?: DownloadInputChapterMode;

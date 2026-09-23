@@ -111,6 +111,9 @@ export const createDownloadBodyIncludeSubtitlesDefault = false;
 export const CreateDownloadBody = zod.object({
   "url": zod.string().min(createDownloadBodyUrlMin),
   "title": zod.string().optional(),
+  "channel": zod.string().optional(),
+  "thumbnailUrl": zod.string().optional(),
+  "durationSeconds": zod.number().int().optional(),
   "formatId": zod.string().default(createDownloadBodyFormatIdDefault),
   "mode": zod.enum(['video', 'audio']).default(createDownloadBodyModeDefault),
   "chapterMode": zod.enum(['full', 'split']).default(createDownloadBodyChapterModeDefault),
