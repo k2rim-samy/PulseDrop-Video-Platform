@@ -1,6 +1,10 @@
 {
   "extends": "./tsconfig.base.json",
-  "compileOnSave": false,
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "noImplicitAny": false,
+    "strict": false
+  }
   "files": [],
   "references": [
     {
